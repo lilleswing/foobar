@@ -42,7 +42,6 @@ def area(v):
 
 
 def answer(vertices):
-    # Step 1 -- create a bounding rectangle
     a = area(vertices)
     p0 = vertices[0]
     p1 = vertices[1]
