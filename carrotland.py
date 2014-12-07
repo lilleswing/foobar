@@ -1,11 +1,16 @@
 from fractions import gcd
 # BOOOOOOOOOO computational geometry so
 # Lots of edge cases
+# Algorithm description
+# http://stackoverflow.com/questions/1049409/how-many-integer-points-within-the-three-points-forming-a-triangle
+# http://jwilson.coe.uga.edu/EMAT6680Fa05/Schultz/6690/Pick/Pick_Main.htm
 
 # 3 cases
 # 1 co-horizontal and co-vertical
 # a co-horizontal or a co-vertical
 # neigher co-horizontal or co-vertical
+
+# If I were to do this again I would do it in a more OO style
 
 def flip_horizontal(vertices):
     for i in xrange(0, len(vertices)):
