@@ -12,17 +12,21 @@ from fractions import gcd
 
 # If I were to do this again I would do it in a more OO style
 
+
 def flip_horizontal(vertices):
     for i in xrange(0, len(vertices)):
         vertices[i][0] *= -1
+
 
 def flip_vertical(vertices):
     for i in xrange(0, len(vertices)):
         vertices[i][1] *= -1
 
+
 def flip_axis(vertices):
     for i in xrange(0, len(vertices)):
         vertices[i][0], vertices[i][1] = vertices[i][1], vertices[i][0]
+
 
 def shift(vertices, x, y):
     for i in xrange(len(vertices)):
@@ -44,9 +48,9 @@ def case1(vertices, minx, maxx, miny, maxy):
 
     dx = abs(p1[0] - p2[0])
     dy = abs(p1[1] - p2[1])
-    h = gcd(dx,dy) - 1
+    h = gcd(dx, dy) - 1
 
-    return ((j -1) * (k - 1) - h) / 2
+    return ((j - 1) * (k - 1) - h) / 2
 
 
 def case2(vertices, minx, maxx, miny, maxy):
@@ -77,23 +81,50 @@ def case2(vertices, minx, maxx, miny, maxy):
 
     return i
 
-def get_corner_point(vertices, minx, maxx, miny, maxy):
+
+def case3(vertices, minx, maxx, miny, maxy):
     for point in vertices:
         corner_x = point[0] == minx or point[0] == maxx
         corner_y = point[1] == miny or point[1] == maxy
         is_corner_point = corner_x and corner_y
         if is_corner_point:
             corner_point = point
-    if corner_point[0] == minx: # flip across y access
+    if corner_point[0] == minx:  # flip across y access
         flip_horizontal(vertices)
         minx, maxx = -1 * maxx, -1 * minx
-    if corner_point[1] == miny: # flip across x access
+    if corner_point[1] == maxy:  # flip across x access
         flip_vertical(vertices)
         miny, maxy = -1 * maxy, -1 * miny
 
+    non_corners = sorted(filter(lambda x: x != corner_point, vertices))
+    p2 = non_corners[0]
+    p3 = non_corners[1]
 
-def case3(vertices, minx, maxx, miny, maxy):
-    corner_point =
+    j = abs(maxx - minx)
+    k = abs(maxy - miny)
+
+    a = abs(p3[0] - minx)
+    b = abs(maxy - p2[1])
+
+    dx1 = abs(p2[0] - p3[0])
+    dy1 = abs(p2[1] - p3[1])
+    h1 = gcd(dx1, dy1) - 1
+
+    dx2 = abs(p3[0] - corner_point[0])
+    dy2 = abs(p3[1] - corner_point[1])
+    h2 = gcd(dx2, dy2) - 1
+
+    dx3 = abs(p2[0] - corner_point[0])
+    dy3 = abs(p2[1] - corner_point[1])
+    h3 = gcd(dx3, dy3) - 1
+
+    print(j, k, a, b, h1, h2, h3)
+
+    i = (j - 1) * (k - 1) - h1 - h2 - h3
+    i -= ((a - 1) * (b - 1) - h1) / 2
+    i -= ((j - a - 1) * (k - 1) - h2) / 2
+    i -= ((j - 1) * (k - b - 1) - h3) / 2
+    return i
 
 
 def answer(vertices):
@@ -138,15 +169,23 @@ def answer(vertices):
         answer = case3(vertices, minx, maxx, miny, maxy)
     return "%d" % answer
 
+
 def test_answer():
-    t1 =[[0,0],[0,4],[8,0]]
+    t1 = [[0, 0], [0, 4], [8, 0]]
     run_test(t1, 9)
-    t2 =[[2,0],[0,4],[6,0]]
+    t2 = [[2, 0], [0, 4], [6, 0]]
     run_test(t2, 5)
+    t3 = [[0, 1], [5, 0], [2, 5]]
+    #run_test(t3, 10)
+    t4 = [[2, 3], [6, 9], [10, 160]]
+    run_test(t4, 289)
+    t5 = [[91207, 89566], [-88690, -83026], [67100, 47194]]
+    #run_test(t5, 1730960165)
 
 
 def run_test(t1, answer):
     import random
+
     check_answer(t1, answer)
 
     shift(t1, -7, 42)
@@ -161,7 +200,10 @@ def run_test(t1, answer):
     flip_horizontal(t1)
     check_answer(t1, answer)
 
+
 def check_answer(t, a):
     a1 = int(answer(t))
     if a1 != a:
         print "Wrong %s, %d" % (t, a1)
+
+test_answer()
