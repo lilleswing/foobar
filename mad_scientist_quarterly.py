@@ -1,30 +1,33 @@
 __author__ = 'leswing'
 
 
-def answer(L, k):
-    last = [-1 * float('inf')] * k
-    now = [-1 * float('inf')] * k
-    now[0] = L[0]
+"""
+    /**
+     * Solution in java because I didn't want to optimize the python
+     */
+    public static int answer(int [] L, int k) {
+        int[] last = new int[k];
+        int[] now = new int[k];
+        Arrays.fill(last, 0);
+        Arrays.fill(now, 0);
 
-    best = -1 * float('inf')
+        now[0] = L[0];
+        int best = L[0];
+        for(int i = 1; i < L.length; i++) {
+            // Swap now and last
+            int[] temp = now;
+            now = last;
+            last = temp;
+            now[0] = L[i];
 
-    for i in xrange(1, len(L)):
-        last, now = now, last
-        now = [-1 * float('inf')] * k
-        now[0] = L[i]
-        for j in xrange(1, k):
-            now[j] = max(last[j - 1] + L[i], now[j - 1])
-            if now[j] > best:
-                best = now[j]
+            for(int j = 1; j < k; j++) {
+                now[j] = last[j-1] + L[i];
+                if (now[j] > best) {
+                    best = now[j];
+                }
+            }
+        }
 
-    return best
-
-
-def test(l, k, ans):
-    a1 = answer(l, k)
-    if a1 != ans:
-        print "WRONG %s %s %d" % (l, k, a1)
-
-
-test([-100, 95, 86, 47], 3, 228)
-test([40, 91, -68, -36, 24, -67, -32 - 23, -33, -52], 7, 131)
+        return best;
+    }
+"""
