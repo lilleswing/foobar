@@ -4,34 +4,54 @@ __author__ = 'leswing'
 # But turned out it was harder to find a solution then to make one :(
 # Timeout
 
-def gauss_jordan(m, eps = 1.0/(10**10)):
-    """Puts given matrix (2D array) into the Reduced Row Echelon Form.
-       Returns True if successful, False if 'm' is singular.
-       Specifically designed to minimize float roundoff.
-       NOTE: make sure all the matrix items support fractions!
-             An int matrix will NOT work!
-       Written by Jarno Elonen in April 2005, released into Public Domain"""
-    (h, w) = (len(m), len(m[0]))
-    for y in range(0,h):
-        maxrow = y
-        for y2 in range(y+1, h):    # Find max pivot
-            if abs(m[y2][y]) > abs(m[maxrow][y]):
-                maxrow = y2
-        (m[y], m[maxrow]) = (m[maxrow], m[y])
-        if abs(m[y][y]) <= eps:     # Singular?
+def is_bit_set(value, bit_location):
+    and_value = 1 << bit_location
+    if value & and_value > 0:
+        return True
+    return False
+
+
+def clear_bit(row_to_clear, clear_with, bit_location):
+    if is_bit_set(row_to_clear, bit_location):
+        return row_to_clear ^ clear_with
+    return row_to_clear
+
+
+def set_bit(row_index, xor, bit_location):
+    row = xor[row_index]
+    if is_bit_set(row, bit_location):
+        return True
+    for i in xrange(row_index + 1, len(xor)):
+        this_row = xor[i]
+        if is_bit_set(this_row, bit_location):
+            xor[row_index] = xor[row_index] ^ xor[i]
+            return True
+    return False
+
+
+def clear_lower(row_index, xor, bit_location):
+    me = xor[row_index]
+    for i in xrange(row_index + 1, len(xor)):
+        clear_bit(xor[i], me, bit_location)
+
+
+def gauss_jordan(xor, size):
+    """
+    NOTE(LESWING) the left-most element of the matrix in a row
+    is the highest bit set (size -1), but we
+    """
+    for i in xrange(0, size):
+        bit_location = size - i
+        if not set_bit(i, xor, bit_location):
             return False
-        for y2 in range(y+1, h):    # Eliminate column y
-            c = m[y2][y] / m[y][y]
-            for x in range(y, w):
-                m[y2][x] -= m[y][x] * c
-    for y in range(h-1, 0-1, -1): # Backsubstitute
-        c  = m[y][y]
-        for y2 in range(0,y):
-            for x in range(w-1, y-1, -1):
-                m[y2][x] -=  m[y][x] * m[y2][y] / c
-        m[y][y] /= c
-        for x in range(h, w):       # Normalize row y
-            m[y][x] /= c
+        clear_lower(i, xor, bit_location)
+
+    # We now have a lower triangular matrix
+
+    for row_index in xrange(0, size):
+        for col_index in xrange(row_index+1, size):
+            bit_location = size - col_index
+            clear_bit(xor[row_index], xor[col_index], bit_location)
     return True
 
 
@@ -79,11 +99,15 @@ def answer(matrix):
                     mp_row[index] = 1
             mp_row.append(matrix[i][j])
             mp.append(mp_row)
-    gauss_jordan(mp)
+    xor = list()
+    for row in mp:
+        s = "".join([str(x) for x in row])
+        xor.append(int(s, 2))
+    gauss_jordan(xor, len(matrix))
     total = 0
-    for i in xrange(len(mp)):
-        row = mp[i]
-        val = abs(row[-1]) % 2
+    for i in xrange(len(xor)):
+        row = xor[i]
+        val = row & 1
         if val == 1:
             flip(matrix, i)
         total += val
