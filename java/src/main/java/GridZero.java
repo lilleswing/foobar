@@ -1,182 +1,152 @@
 public class GridZero {
+
+    private static boolean[][] makeEquations(int[][] a) {
+        int size = a.length * a.length;
+        boolean[][] matrix = new boolean[size][size + 1];
+
+        for (int row = 0; row < a.length; row++) {
+            for (int col = 0; col < a.length; col++) {
+                int my_index =  row * a.length + col;
+                if (a[row][col] == 1) {
+                    matrix[my_index][size] = true;
+                }
+
+                // mark the system of linear equations
+                for (int i = 0; i < a.length; i++) {
+                    int my_row = row * a.length + i;
+                    int my_col = col + i * a.length;
+                    matrix[my_index][my_row] = true;
+                    matrix[my_index][my_col] = true;
+                }
+            }
+        }
+        return matrix;
+    }
+
+    private static double[] flatten(int[][] matrix) {
+        double[] retval = new double[matrix.length* matrix.length];
+        int index = 0;
+        for (int i = 0; i < matrix.length; i++) {
+            for (int j = 0; j < matrix.length; j++) {
+                retval[index++] = matrix[i][j];
+            }
+        }
+        return retval;
+    }
+
+
+    public static int answer(int[][] matrix) {
+        boolean[][] myEquations = makeEquations(matrix);
+        //double[] answers = flatten(matrix);
+        final GaussJordanElimination gaussJordanElimination = new GaussJordanElimination(myEquations);
+        gaussJordanElimination.eliminate();
+
+        int numMoves = 0;
+        boolean[] moves = gaussJordanElimination.getMoves();
+        for (int i = 0; i < myEquations.length; i++) {
+            if (moves[i]) {
+                numMoves += 1;
+                int row = i / matrix.length;
+                int col = i % matrix.length;
+                flip(matrix, row, col);
+            }
+        }
+        if (valid(matrix)) {
+            return numMoves;
+        }
+        return -1;
+    }
+
+    private static boolean valid(int[][] matrix) {
+        for (int i = 0; i < matrix.length; i++) {
+            for (int j = 0; j < matrix.length; j++) {
+                if(matrix[i][j] == 1) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private static void flip(int[][] matrix, int row, int col) {
+        for(int i = 0; i < matrix.length; i++) {
+            matrix[row][i] ^= 1;
+            matrix[i][col] ^= 1;
+        }
+        matrix[row][col] ^= 1;
+    }
 }
+
 class GaussJordanElimination {
-    private static final double EPSILON = 1e-8;
 
-    private final int N;      // N-by-N system
-    private double[][] a;     // N-by-N+1 augmented matrix
+    private boolean[][] matrix;
+    private boolean[] moves;
+    private boolean[] noRank;
 
-    // Gauss-Jordan elimination with partial pivoting
-    public GaussJordanElimination(double[][] A, double[] b) {
-        N = b.length;
-
-        // build augmented matrix
-        a = new double[N][N+N+1];
-        for (int i = 0; i < N; i++)
-            for (int j = 0; j < N; j++)
-                a[i][j] = A[i][j];
-
-        // only need if you want to find certificate of infeasibility (or compute inverse)
-        for (int i = 0; i < N; i++)
-            a[i][N+i] = 1.0;
-
-        for (int i = 0; i < N; i++) a[i][N+N] = b[i];
-
-        solve();
-
-        assert check(A, b);
+    public GaussJordanElimination(final boolean[][] matrix) {
+        this.matrix = matrix;
+        moves = new boolean[matrix.length];
+        noRank = new boolean[matrix.length];
     }
 
-    private void solve() {
-
-        // Gauss-Jordan elimination
-        for (int p = 0; p < N; p++) {
-            // show();
-
-            // find pivot row using partial pivoting
-            int max = p;
-            for (int i = p+1; i < N; i++) {
-                if (Math.abs(a[i][p]) > Math.abs(a[max][p])) {
-                    max = i;
-                }
+    private boolean setBit(int rowIndex) {
+        if(matrix[rowIndex][rowIndex]) {
+            return true;
+        }
+        for (int i = rowIndex + 1; i < matrix.length; i++) {
+            if (matrix[i][rowIndex]) {
+                xor(rowIndex, i);
+                return true;
             }
+        }
+        return false;
+    }
 
-            // exchange row p with row max
-            swap(p, max);
+    private void xor(int rowIndex, int i) {
+        for(int j = 0; j < matrix[0].length; j++) {
+            matrix[rowIndex][j] = matrix[rowIndex][j] ^ matrix[i][j];
+        }
+    }
 
-            // singular or nearly singular
-            if (Math.abs(a[p][p]) <= EPSILON) {
+    public boolean eliminate(){
+        for(int rowIndex = 0; rowIndex < matrix.length; rowIndex++) {
+            if (!setBit(rowIndex)) {
+                System.out.println("error, no element in " + rowIndex);
+                noRank[rowIndex] = true;
                 continue;
-                // throw new RuntimeException("Matrix is singular or nearly singular");
             }
-
-            // pivot
-            pivot(p, p);
-        }
-        // show();
-    }
-
-    // swap row1 and row2
-    private void swap(int row1, int row2) {
-        double[] temp = a[row1];
-        a[row1] = a[row2];
-        a[row2] = temp;
-    }
-
-
-    // pivot on entry (p, q) using Gauss-Jordan elimination
-    private void pivot(int p, int q) {
-
-        // everything but row p and column q
-        for (int i = 0; i < N; i++) {
-            double alpha = a[i][q] / a[p][q];
-            for (int j = 0; j <= N+N; j++) {
-                if (i != p && j != q) a[i][j] -= alpha * a[p][j];
-            }
-        }
-
-        // zero out column q
-        for (int i = 0; i < N; i++)
-            if (i != p) a[i][q] = 0.0;
-
-        // scale row p (ok to go from q+1 to N, but do this for consistency with simplex pivot)
-        for (int j = 0; j <= N+N; j++)
-            if (j != q) a[p][j] /= a[p][q];
-        a[p][q] = 1.0;
-    }
-
-    // extract solution to Ax = b
-    public double[] primal() {
-        double[] x = new double[N];
-        for (int i = 0; i < N; i++) {
-            if (Math.abs(a[i][i]) > EPSILON)
-                x[i] = a[i][N+N] / a[i][i];
-            else if (Math.abs(a[i][N+N]) > EPSILON)
-                return null;
-        }
-        return x;
-    }
-
-    // extract solution to yA = 0, yb != 0
-    public double[] dual() {
-        double[] y = new double[N];
-        for (int i = 0; i < N; i++) {
-            if ( (Math.abs(a[i][i]) <= EPSILON) && (Math.abs(a[i][N+N]) > EPSILON) ) {
-                for (int j = 0; j < N; j++)
-                    y[j] = a[i][N+j];
-                return y;
-            }
-        }
-        return null;
-    }
-
-    // does the system have a solution?
-    public boolean isFeasible() {
-        return primal() != null;
-    }
-
-    // print the tableaux
-    /*
-    private void show() {
-        for (int i = 0; i < N; i++) {
-            for (int j = 0; j < N; j++) {
-                StdOut.printf("%8.3f ", a[i][j]);
-            }
-            StdOut.printf("| ");
-            for (int j = N; j < N+N; j++) {
-                StdOut.printf("%8.3f ", a[i][j]);
-            }
-            StdOut.printf("| %8.3f\n", a[i][N+N]);
-        }
-        StdOut.println();
-    }
-    */
-
-
-    // check that Ax = b or yA = 0, yb != 0
-    private boolean check(double[][] A, double[] b) {
-
-        // check that Ax = b
-        if (isFeasible()) {
-            double[] x = primal();
-            for (int i = 0; i < N; i++) {
-                double sum = 0.0;
-                for (int j = 0; j < N; j++) {
-                    sum += A[i][j] * x[j];
-                }
-                if (Math.abs(sum - b[i]) > EPSILON) {
-                    // StdOut.println("not feasible");
-                    // StdOut.printf("b[%d] = %8.3f, sum = %8.3f\n", i, b[i], sum);
-                    return false;
+            for (int j = rowIndex + 1; j < matrix.length; j++) {
+                if(matrix[j][rowIndex]) {
+                    xor(j, rowIndex);
                 }
             }
-            return true;
         }
 
-        // or that yA = 0, yb != 0
-        else {
-            double[] y = dual();
-            for (int j = 0; j < N; j++) {
-                double sum = 0.0;
-                for (int i = 0; i < N; i++) {
-                    sum += A[i][j] * y[i];
-                }
-                if (Math.abs(sum) > EPSILON) {
-                    // StdOut.println("invalid certificate of infeasibility");
-                    // StdOut.printf("sum = %8.3f\n", sum);
-                    return false;
+        // Clear upper now
+        for (int rowIndex = 0; rowIndex < matrix.length; rowIndex++) {
+            for (int colIndex = rowIndex + 1; colIndex < matrix.length; colIndex++) {
+                if(matrix[rowIndex][colIndex]) {
+                    xor(rowIndex, colIndex);
                 }
             }
-            double sum = 0.0;
-            for (int i = 0; i < N; i++) {
-                sum += y[i] * b[i];
-            }
-            if (Math.abs(sum) < EPSILON) {
-                //StdOut.println("invalid certificate of infeasibility");
-                // StdOut.printf("yb  = %8.3f\n", sum);
-                return false;
-            }
-            return true;
         }
+        return true;
+    }
+
+    public boolean[] getMoves() {
+        for(int i = 0; i < matrix.length; i++) {
+            if(noRank[i]) {
+                continue;
+            }
+            boolean on = matrix[i][matrix[0].length - 1];
+            if (on) {
+                for(int j = 0; j < matrix.length; j++) {
+                    if(matrix[i][j]) {
+                        moves[j] ^= true;
+                    }
+                }
+            }
+        }
+        return moves;
     }
 }
