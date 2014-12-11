@@ -20,6 +20,15 @@ public class GridZero {
                 }
             }
         }
+
+        final boolean[][] transpose = new boolean[size][size+1];
+        for(int i = 0; i < matrix.length; i++) {
+            for(int j = 0; j < matrix.length; j++) {
+                transpose[i][j] = matrix[j][i];
+            }
+            transpose[i][matrix.length] = matrix[i][matrix.length];
+        }
+
         return matrix;
     }
 
@@ -40,6 +49,7 @@ public class GridZero {
         //double[] answers = flatten(matrix);
         final GaussJordanElimination gaussJordanElimination = new GaussJordanElimination(myEquations);
         gaussJordanElimination.eliminate();
+        gaussJordanElimination.display();
 
         int numMoves = 0;
         boolean[] moves = gaussJordanElimination.getMoves();
@@ -81,20 +91,18 @@ class GaussJordanElimination {
 
     private boolean[][] matrix;
     private boolean[] moves;
-    private boolean[] noRank;
 
     public GaussJordanElimination(final boolean[][] matrix) {
         this.matrix = matrix;
         moves = new boolean[matrix.length];
-        noRank = new boolean[matrix.length];
     }
 
-    private boolean setBit(int rowIndex) {
-        if(matrix[rowIndex][rowIndex]) {
+    private boolean setBit(int rowIndex, int colIndex) {
+        if(matrix[rowIndex][colIndex]) {
             return true;
         }
         for (int i = rowIndex + 1; i < matrix.length; i++) {
-            if (matrix[i][rowIndex]) {
+            if (matrix[i][colIndex]) {
                 xor(rowIndex, i);
                 return true;
             }
@@ -109,35 +117,30 @@ class GaussJordanElimination {
     }
 
     public boolean eliminate(){
+        int colIndex = 0;
         for(int rowIndex = 0; rowIndex < matrix.length; rowIndex++) {
-            if (!setBit(rowIndex)) {
-                System.out.println("error, no element in " + rowIndex);
-                noRank[rowIndex] = true;
-                continue;
+            while (!setBit(rowIndex, colIndex)) {
+                System.out.println("Matrix size: " + matrix.length + " not invertible");
+                colIndex++;
+                if (colIndex >=matrix.length) {
+                    return true;
+                }
             }
-            for (int j = rowIndex + 1; j < matrix.length; j++) {
-                if(matrix[j][rowIndex]) {
+            for (int j = 0; j < matrix.length; j++) {
+                if (rowIndex == j) {
+                    continue;
+                }
+                if(matrix[j][colIndex]) {
                     xor(j, rowIndex);
                 }
             }
-        }
-
-        // Clear upper now
-        for (int rowIndex = 0; rowIndex < matrix.length; rowIndex++) {
-            for (int colIndex = rowIndex + 1; colIndex < matrix.length; colIndex++) {
-                if(matrix[rowIndex][colIndex]) {
-                    xor(rowIndex, colIndex);
-                }
-            }
+            colIndex++;
         }
         return true;
     }
 
     public boolean[] getMoves() {
         for(int i = 0; i < matrix.length; i++) {
-            if(noRank[i]) {
-                continue;
-            }
             boolean on = matrix[i][matrix[0].length - 1];
             if (on) {
                 for(int j = 0; j < matrix.length; j++) {
@@ -149,4 +152,19 @@ class GaussJordanElimination {
         }
         return moves;
     }
+
+    public void display() {
+        for(int i = 0; i < matrix.length; i++) {
+            for(int j = 0; j < matrix[0].length; j++) {
+                if(matrix[i][j]) {
+                    System.out.print("1");
+                } else {
+                    System.out.print("0");
+                }
+            }
+            System.out.println();
+        }
+
+    }
+
 }

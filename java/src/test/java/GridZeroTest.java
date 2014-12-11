@@ -25,4 +25,29 @@ public class GridZeroTest {
         final int answer = GridZero.answer(matrix);
         assertEquals(2, answer);
     }
+
+    @Test
+    public void testAnswerThree2() {
+        final int[][] matrix = {{0,1,0},{1,1,1},{0,1,0}};
+        final int answer = GridZero.answer(matrix);
+        assertEquals(1, answer);
+    }
+
+    @Test
+    public void testAnswerThree3() {
+        final int[][] matrix = {{0,0,1},{0,0,1},{1,1,1}};
+        final int answer = GridZero.answer(matrix);
+        assertEquals(1, answer);
+    }
+
+    @Test
+    public void testInvertebility() {
+        for(int matrixSize = 2; matrixSize <= 15; matrixSize++) {
+            final int[][] matrix = new int[matrixSize][matrixSize];
+            final int answer = GridZero.answer(matrix);
+        }
+        //final int[][] matrix = {{0,0,1},{0,0,1},{1,1,1}};
+        //final int answer = GridZero.answer(matrix);
+        //assertEquals(-1, answer);
+    }
 }
