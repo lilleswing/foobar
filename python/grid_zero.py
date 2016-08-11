@@ -1,319 +1,896 @@
 __author__ = 'leswing'
-
-# I didn't want to implement Gaussian Elimination in GF(2)
-# But turned out it was harder to find a solution then to make one :(
-# Timeout
-
-def ZMod(m):
-    '''Return a function that makes Mod objects for a particular modulus m.
-    '''
-    def ModM(coef):
-        return Mod(coef, m)
-    return ModM
-
-class FiniteGroup:
-    '''Super class provides an iterator for self's group.'''
-
-    def group(self, excludeSelf=False):
-        '''Iterator over self's whole group if not excludeSelf,
-        starting from self or right after it if excludeSelf.
-        This version assuming subclass defines instance method next.
-        '''
-        if not excludeSelf:
-            yield self
-        f, last = self.next(), None
-        while f != self:
-            yield f
-            f, last = f.next(last), f
-
-    def next(self, prev=None):
-        '''Cyclicly return another element of the group.
-        This version depends on methods int, likeFromInt, totCodes.
-        Optional argument prev ignored in this version.'''
-        return self.likeFromInt((int(self)+1) % self.totCodes())
+import math
+import copy
 
 
-class ParamClass:
-    '''Mixin class allows conversion to object with same parameters.
-    Assumes method sameParam and constructor that can copy parameters.'''
+def to_base(number, base):
+    assert number >= 0
+    assert base > 1
+    field = GF(base)
+    ret = []
+    i = 0
+    while number > 0:
+        digit = number % base
+        ret = [field[digit]] + ret
+        number /= base
+    if len(ret) == 0:
+        ret = [field[0]]
+    return ret
 
-    def like(self, val):
-        '''convert val to a the same kind of object as self.'''
-        if self.sameParam(val):
-            return val  # avoid unnecessary copy - assumes immutable
-        return self.__class__(val, self)
 
-    def tryLike(self, val):
-        '''convert val to the same kind of object as self, with the same
-        required parameters, if possible, or return None'''
-        try:
-            return self.like(val)
-        except:
-            return None
+_primes = [2, 3]
 
-class Mod(FiniteGroup, ParamClass): #subclass of classes above
-    '''A class for modular arithmetic, mod m.
-    If m is prime, the inverse() method and division operation are always
-    defined, and the class represents a field.
 
-    >>> Mod26 = ZMod(26)
-    >>> x = Mod26(4)
-    >>> y = Mod26(11)
-    >>> z = Mod26(39)
-    >>> print x+y
-    15 mod 26
-    >>> print z
-    13 mod 26
-    >>> print -x
-    22 mod 26
-    >>> print z - x
-    9 mod 26
-    >>> print x*8
-    6 mod 26
-    >>> print x*z
-    0 mod 26
-    >>> print x**6
-    14 mod 26
-    >>> print x/y
-    24 mod 26
-    >>> x == y
-    False
-    >>> x*y == -8
-    True
-    >>> e = Mod(1, 5)
-    >>> for x in range(1, 5):
-    ...     print x, int(e/x)
-    1 1
-    2 3
-    3 2
-    4 4
-    '''
-
-    #class invarient:
-    #  self.m is the modulus
-    #  self.value is the usual smallest nonnegative representative
-
-    def __init__(self, n=0, m=None):
-        '''Construct a Mod object.
-        If n is a Mod, just copy its n and m, and any m parameter should match.
-        If m is a Mod, take its m value.
-        Otherwise both m and n should be integers, m > 1; construct n mod m.
-        '''
-        if isinstance(m, Mod):
-            m = m.m
-        if isinstance(n, Mod):
-            assert m is None or m == n.m, 'moduli do not match'
-            self.value = n.value; self.m = n.m
-            return
-        else:
-            assert isinstance(m, (int, long)), 'Modulus type must be int or Mod'
-            assert m > 1, 'Need modulus > 1'
-        assert isinstance(n, (int, long)), 'representative value must be int'
-        self.m = m; self.value = n % m
-
-    def __str__(self):   # used by str built-in function, which is used by print
-        'Return an informal string representation of object'
-        return "{0} mod {1}".format(self.value, self.m)
-
-    def __repr__(self):  # used by repr built-in function
-        'Return a formal string representation, usable in the Shell'
-        return "Mod({0}, {1})".format(self.value, self.m)
-
-    def sameParam(self, other):
-        'True if other is a Mod with same modulus'
-        return isinstance(other, Mod) and other.m == self.m
-
-    def __add__(self, other): # used by + infix operand
-        'Return self + other, if defined'
-        other = self.tryLike(other)
-        if other is None: return NotImplemented
-        return Mod(self.value + other.value, self.m)
-
-    def __sub__(self, other): # used by - infix operand
-        'Return self - other, if defined'
-        other = self.tryLike(other)
-        if other is None: return NotImplemented
-        return Mod(self.value - other.value, self.m)
-
-    def __neg__(self):# used by - unary operand
-        'Return -self'
-        return Mod(-self.value, self.m)
-
-    def __mul__(self, other): # used by * infix operand
-        'Return self * other, if defined'
-        other = self.tryLike(other)
-        if other is None: return NotImplemented
-        return Mod(self.value * other.value, self.m)
-
-    def __div__(self,other):
-        'Return self/other if other.inverse() is defined.'
-        other = self.tryLike(other)
-        if other is None: return NotImplemented
-        return self * other.inverse()
-
-    def __eq__(self, other): # used by == infix operand
-        '''Return self == other, if defined
-        Allow conversion of int to same Mod type before test.  Good idea?'''
-        other = self.tryLike(other)
-        if other is None: return NotImplemented
-        return other.value == self.value
-
-    def __ne__(self, other): # used by != infix operand
-        'Return self != other, if defined'
-        return not self == other
-
-    # operations where only the second operand is a Mod (prefix r)
-    def __radd__(self, other):
-        'Return other + self, if defined, when other is not a Mod'
-        return self + other # commutative, and now Mod first
-
-    def __rsub__(self, other):
-        'Return other - self, if defined, when other is not a Mod'
-        return -self + other # can make definite Mod first
-
-    def __rmul__(self, other):
-        'Return other * self, if defined, when other is not a Mod'
-        return self * other # commutative, and now Mod first
-
-    def __rdiv__(self,other):
-        'Return other/self if self.inverse() is defined.'
-        return self.inverse() * other # can make definite Mod first
-
-    def __pow__(self, n): # used by ** infix operator
-        '''compute power using successive squaring for integer n
-        Negative n allowed if self has an inverse.'''
-        s = self  # s holds the current square
-        if n < 0:
-            s = s.inverse()
-            n = abs(n)
-        return Mod(pow(s.value, n, s.m), s.m)
-        # algorithm (but not in C):
-    ##        result = Mod(1, self.m)
-    ##        while n > 0:
-    ##           if n % 2 == 1:
-    ##              result = s * result
-    ##           s = s * s  # compute the next square
-    ##           n = n//2    # compute the next quotient
-    ##        return result
-
-    def __int__(self):
-        'Return lowest nonnegative integer representative.'
-        return self.value
-
-    def totCodes(self):
-        '''Return number of elements in the group.
-        This is an upper bound for likeFromInt.'''
-        return self.m
-
-    def likeFromInt(self, n):
-        '''Int code to Mod object'''
-        assert 0 <= n < self.m
-        return Mod(n, self.m)
-
-    def __nonzero__(self):
-        """Returns True if the current value is nonzero.
-        (Used for conversion to boolean.)
-        """
-        return self.value != 0
-
-    def __hash__(self):
-        ''' Hash value definition needed for use in dictionaries and sets.'''
-        return hash(self.value)
-
-    def modulus(self):
-        '''Return the modulus.'''
-        return self.m
-
-    def inverse(self):
-        '''Return the multiplicative inverse or else raise a ValueError.'''
-        (g,x,y) = xgcd(self.value, self.m)
-        if g == 1:
-            return Mod(x, self.m)
-        raise ValueError, 'Value not invertible'
-
-def xgcd(a,b):
-    """Extended GCD:
-    Returns (gcd, x, y) where gcd is the greatest common divisor of a and b
-    with the sign of b if b is nonzero, and with the sign of a if b is 0.
-    The numbers x,y are such that gcd = ax+by."""
-    prevx, x = 1, 0;  prevy, y = 0, 1
-    while b:
-        q, r = divmod(a,b)
-        x, prevx = prevx - q*x, x
-        y, prevy = prevy - q*y, y
-        a, b = b, r
-    return a, prevx, prevy
-
-# EXPLANATION:
-# Mathematical analysis reveals that at each stage in the calculation
-# the current remainder can be expressed in the form ax + by for some
-# integers x, y.  Moreover, the x-sequence and y-sequence are
-# generated by the recursion (where q is the integer quotient of the
-# current division):
-#
-#         new x = prev x - q * x;   new y = prev y - q * y
-#
-# and where the initial values are x = 0, prev x = 1, y = 1, prev y = 0.
-# Moreover, upon termination the x and y sequences have gone one step
-# too far, (as has the remainder), so return the previous x, y values.
-
-def gauss_jordanModPow2(m):
-    """Puts given matrix (2D array) into the Reduced Row Echelon Form.
-    Returns True if successful, False if 'm' is singular.
-    Assumes all elements are in Z/nZ with n a powr of 2.  One line changed
-    Based on floating point code by Jarno Elonen,April 2005,
-    released into Public Domain"""
-    # Only change from field version is 6th line.
-    (h, w) = (len(m), len(m[0]))
-    for y in range(0,h):
-        for pivot in range(y, h):    # Find nonzero (invertible) pivot
-            if m[pivot][y].value % 2 != 0: #ONLY CHANGE - easy test for invertible
-                break
-        else: # Python syntax with FOR not if
+def is_prime(n):
+    i = 0
+    sqrt = math.sqrt(n)
+    while get_prime(i) <= sqrt:
+        if n % get_prime(i) == 0:
             return False
-        if y != pivot:
-            (m[y], m[pivot]) = (m[pivot], m[y]) # swap pivot row
-        if m[y][y] != 1:
-            inv = m[y][y].inverse()             # normalize exactly immediately
-            for x in range(y, w):
-                m[y][x] *= inv
-        for y2 in range(y+1, h):    # Eliminate column y, below row y
-            c = m[y2][y]
-            for x in range(y, w):
-                m[y2][x] -= m[y][x] * c
-    for y in range(h-1, 0-1, -1): # Backsubstitute
-        for y2 in range(0,y):
-            for x in range(w-1, y-1, -1):
-                m[y2][x] -=  m[y][x] * m[y2][y]
+        i += 1
     return True
 
 
-def matConvert(mat, cls):
-    '''Return a new matrix/list with all elements e of matrix m replaced by
-    cls(e).  The name is chosen to suggest a class conversion,
-    but any function could be used for 1-1 replacements of non-list elements.
-    '''
-    if isinstance(mat, list):
-        return [matConvert(r, cls) for r in mat]
-    return cls(mat)
+def next_prime(p):
+    i = p + 1
+    while not is_prime(i):
+        i += 1
+    return i
 
 
-def flip(m, index):
-    size = len(m)
-    row = index // size
-    col = index % size
-    for i in xrange(size):
-        m[row][i] += 1
-        m[i][col] += 1
-    m[row][col] += 1
+def get_prime(n):
+    global _primes
+    if n < len(_primes):
+        return _primes[n]
+    while n >= len(_primes):
+        _primes.append(next_prime(_primes[-1]))
+    return _primes[n]
+
+
+def factor(n):
+    i = 0
+    factors = []
+    while n != 1:
+        while n % get_prime(i) == 0:
+            factors.append(get_prime(i))
+            n /= get_prime(i)
+        i += 1
+    return factors
+
+
+def phi(n):
+    factors = set(factor(n))
+    prod = n
+    for f in factors:
+        prod = prod - prod / f
+    return prod
+
+
+def addition(a, b):
+    return a + b
+
+
+def multiplication(a, b):
+    return a * b
+
+
+def default_format(elem, field):
+    return str(field.index(elem))
+
+
+def str_format(elem, field):
+    return str(elem)
+
+
+def repr_format(elem, field):
+    return repr(elem)
+
+
+def get_latex_table(field, operation, formatting=default_format):
+    latex = "\\begin{tabular}{c|" + "c" * len(field) + "}\n"
+    latex += "? & " + " & ".join([formatting(e, field) for e in field])
+    latex += "\\\\\n\\hline\n"
+    rows = []
+    for a in field:
+        rows.append([])
+        for b in field:
+            rows[-1].append(operation(a, b))
+    rows = [[field[i]] + row for i, row in enumerate(rows)]
+    rows = [[formatting(e, field) for e in row] for row in rows]
+    rows = [" & ".join(row) for row in rows]
+    latex += "\\\\\n".join(rows)
+    latex += "\n\\end{tabular}"
+    return latex
+
+
+def is_group(elems, addition=addition):
+    """A proof by contradiction that the set 'elems' is not a Group
+    under 'addition'."""
+    # To prove by contradiction that there is an additive identity,
+    # we will assume that the opposite is true.
+    zero = None
+    # The following is a proof by cases that an additive identity exists
+    # and that addition is a closure.
+    # Let 'a' be an element in 'elems' and
+    for a in elems:
+        # assume that a = 0.
+        isZero = True
+        # Let 'b' be an element in 'elems'.
+        for b in elems:
+            # If 'a+b=0' then
+            if not addition(a, b) in elems:
+                # 'elems' is not a group under addition.
+                return False
+            # For all 'c' in the set 'elems',
+            for c in elems:
+                # Let...
+                # sum1 = (a+b)+c
+                # sum2 = a+(b+c)
+                sum1 = addition(addition(a, b), c)
+                sum2 = addition(a, addition(b, c))
+                # Addition is not associative if 'sum1' does not
+                # equal 'sum2'
+                if sum1 != sum2:
+                    # so 'elems' is not a group under addition.
+                    return False
+            # If a+b does not equal b then...
+            if addition(a, b) != b or addition(b, a) != b:
+                # a is not equal to zero
+                isZero = False
+        #
+        if isZero:
+            zero = a
+    # has zero element
+    if zero is None:
+        return False
+    # has subtraction
+    for a in elems:
+        hasInverse = False
+        for b in elems:
+            if addition(a, b) == zero and addition(b, a) == zero:
+                hasInverse = True
+        if not hasInverse:
+            return False
+    # passed every test
+    return True
+
+
+def is_ring(elems, addition=addition, multiplication=multiplication):
+    # is also a group under addition
+    if not is_group(elems, addition):
+        return False, "Is Not group"
+    for a in elems:
+        for b in elems:
+            # addition is communicative
+            if addition(a, b) != addition(b, a):
+                return False, "Addition is not communicative"
+            # multiplication is closed
+            if not multiplication(a, b) in elems:
+                return False, "Multiplication isn't a closure."
+            for c in elems:
+                # multiplication is associative
+                prod1 = multiplication(multiplication(a, b), c)
+                prod2 = multiplication(a, multiplication(b, c))
+                if prod1 != prod2:
+                    return False, "Multiplication is not associative"
+                # distribution works
+                result1 = multiplication(a, addition(b, c))
+                left = multiplication(a, b)
+                right = multiplication(a, c)
+                result2 = addition(left, right)
+                if result1 != result2:
+                    return False, "Distribution doesn't work"
+                result1 = multiplication(addition(b, c), a)
+                left = multiplication(b, a)
+                right = multiplication(c, a)
+                result2 = addition(left, right)
+                if result1 != result2:
+                    return False, "Distribution doesn't work"
+    return True
+
+
+def is_field(elems, addition=addition, multiplication=multiplication):
+    # is also a ring
+    if not is_ring(elems, addition, multiplication):
+        return False, "Is Not Ring"
+    # check that multiplication is communative
+    # and get zero
+    zero = None
+    for a in elems:
+        isZero = True
+        for b in elems:
+            if multiplication(a, b) != multiplication(b, a):
+                return False, "Multiplication is not communative"
+            if addition(a, b) != b:
+                isZero = False
+            if addition(b, a) != b:
+                isZero = False
+        if isZero:
+            zero = a
+    # check that there is a multiplicative identity
+    one = None
+    for a in elems:
+        # by cases
+        isOne = True
+        for b in elems:
+            if b is not zero:
+                if multiplication(a, b) != b or multiplication(b, a) != b:
+                    isOne = False
+        if isOne:
+            one = a
+    if one is None:
+        return False, "No multiplicative identity"
+    # the element is a field
+    return True
+
+
+class FFE:
+    """An element of a finite field."""
+
+    def __init__(self, i, p, field=None, mulinv=None, parent=None):
+        self.i = i
+        self.p = p
+        self.mulinv = mulinv
+        self.field = field  # the field which contains i
+        self.parent = parent  # such as GF(8)
+
+    def belongs_to(self):
+        if self.parent is not None:
+            return self.parent
+        else:
+            return GF(self.p)
+
+    def __add__(self, other):
+        if isinstance(other, FFE):
+            assert self.p == other.p
+            return FFE((self.i + other.i) % self.p, self.p, field=self.field, parent=self.parent)
+        else:
+            return other.__radd__(self)
+
+    def __sub__(self, other):
+        if isinstance(other, FFE):
+            assert self.p == other.p
+            return FFE((self.i - other.i) % self.p, self.p, field=self.field, parent=self.parent)
+        else:
+            return other.__rsub__(self)
+
+    def __mul__(self, other):
+        if isinstance(other, FFE):
+            assert self.p == other.p
+            return FFE((self.i * other.i) % self.p, self.p, field=self.field, parent=self.parent)
+        else:
+            return other.__rmul__(self)
+
+    def __div__(self, other):
+        if isinstance(other, FFE):
+            assert self.p == other.p
+            return self * other.mul_inv()
+        else:
+            return other.__rdiv__(self)
+
+    def mul_inv(self):
+        if self.mulinv is not None:
+            return self.mulinv
+        if self.field is None and self.parent is not None:
+            one = FFE(self.p / self.p, self.p)
+            for e in self.parent:
+                if e * self == one:
+                    self.mulinv = e
+                    e.mulinv = self
+                    return e
+        if self.field is not None and self.mulinv is None:
+            zero = self.i - self.i
+            one = self.p / self.p
+            for e in self.field:
+                if e != zero and (e * self.i) % self.p == one:
+                    self.mulinv = FFE(e, self.p,
+                                      field=self.field, mulinv=self,
+                                      parent=self.parent
+                                      )
+            return self.mulinv
+        zero = self.i - self.i
+        assert self.i != zero
+        one = self.i / self.i
+        u = self.i
+        v = self.p
+        x1 = one
+        x2 = zero
+        while u != one:
+            q = v // u
+            r = v - q * u
+            x = x2 - q * x1
+            v = u
+            u = r
+            x2 = x1
+            x1 = x
+        self.mulinv = FFE(x1 % self.p, self.p, mulinv=self, parent=self.parent)
+        return self.mulinv
+
+    def __pow__(self, i):
+        return self.__smart_pow__(i)[0]
+
+    def __smart_pow__(self, i, temp=None):
+        assert i >= 1
+        if temp is None:
+            temp = {1: copy.deepcopy(self)}
+        if i in temp:
+            return temp[i], temp
+        else:
+            half = i // 2
+            half_ = half + i % 2
+            left, temp = self.__smart_pow__(half, temp=temp)
+            temp[half] = left
+            right, temp = self.__smart_pow__(half_, temp=temp)
+            temp[half_] = right
+            return left * right, temp
+
+    def __ord__(self):
+        one = self / self
+        i = 1
+        result, temp = self.__smart_pow__(i)
+        while result != one:
+            i += 1
+            result, temp = self.__smart_pow__(i, temp)
+        return i
+
+    def __neg__(self):
+        return FFE((self.p - self.i) % self.p, self.p, field=self.field, parent=self.parent)
+
+    def __eq__(self, other):
+        assert self.p == other.p
+        return self.i == other.i
+
+    def __ne__(self, other):
+        assert self.p == other.p
+        return self.i != other.i
+
+    def __str__(self):
+        if self.parent is not None and isinstance(self.parent, GF):
+            return "GF(%d)[%d]" % (len(self.parent), self.parent.index(self))
+        return "%s" % str(self.i)
+
+    def __repr__(self):
+        return "FFE(%s,%s)" % (str(self.i), str(self.p))
+
+    def __nonzero__(self):
+        return self.i != 0
+
+    def __int__(self):
+        return self.i
+
+    def __float__(self):
+        return float(self.i)
+
+    def __complex__(self):
+        return complex(self.i)
+
+    def __long__(self):
+        return long(self.i)
+
+    def __oct__(self):
+        return oct(self.i)
+
+    def __hex__(self):
+        return hex(self.i)
+
+
+backup_ord = ord
+
+
+def ord(obj):
+    if hasattr(obj, '__ord__'):
+        return obj.__ord__()
+    else:
+        return backup_ord(obj)
+
+
+class Polynomial:
+    def __init__(self, coefficients):
+        assert len(coefficients) > 0
+        self.coefficients = coefficients
+        self._trim_()
+
+    def _zero_(self):
+        return self.coefficients[0] - self.coefficients[0]
+
+    def _trim_(self):
+        zero = self._zero_()
+        while self.deg() > 0 and self.coefficients[-1] == zero:
+            self.coefficients.pop()
+
+    def to_Zmod(self, mod):
+        coefficients = self.coefficients
+        return Polynomial([FFE(c % mod, mod) for c in coefficients])
+
+    def to_GF(self, n):
+        field = GF(n)
+        coefficients = self.coefficients
+        return Polynomial([field[c] for c in coefficients])
+
+    def to_latex(self):
+        zero = self - self
+        if self == zero:
+            return "0"
+        coefs = [str(c) for c in self.coefficients]
+        latex = ""
+        for i, c in reversed(list(enumerate(coefs))):
+            if c != "0":
+                if latex:
+                    latex += "+"
+                if i == 0:
+                    latex += c
+                elif i == 1:
+                    latex += (c if c != "1" else "") + "x"
+                else:
+                    latex += (c if c != "1" else "") + "x^{%d}" % i
+        return latex
+
+    def deg(self):
+        return len(self.coefficients) - 1
+
+    def __neg__(self):
+        return Polynomial([-c for c in self.coefficients])
+
+    def __add__(self, other):
+        result = []
+        zero = self._zero_()
+        for i in xrange(max(self.deg(), other.deg()) + 1):
+            coef = zero
+            if i <= self.deg():
+                coef = coef + self.coefficients[i]
+            if i <= other.deg():
+                coef = coef + other.coefficients[i]
+            result.append(coef)
+        return Polynomial(result)
+
+    def __sub__(self, other):
+        return self + (-other)
+
+    def __mul__(self, other):
+        results = []
+        for a in self.coefficients:
+            results.append([])
+            for b in other.coefficients:
+                results[-1].append(a * b)
+        result = results.pop(0)
+        zero = self._zero_()
+        for coresult in results:
+            result.append(zero)
+            for i in xrange(len(coresult)):
+                result[-i - 1] += coresult[-i - 1]
+        return Polynomial(result)
+
+    def __pow__(self, i):
+        return self.__smart_pow__(i)[0]
+
+    def __smart_pow__(self, i, temp=None):
+        assert i >= 1
+        if temp is None:
+            temp = {1: copy.deepcopy(self)}
+        if i in temp:
+            return temp[i], temp
+        else:
+            half = i // 2
+            half_ = half + i % 2
+            left, temp = self.__smart_pow__(half, temp=temp)
+            temp[half] = left
+            right, temp = self.__smart_pow__(half_, temp=temp)
+            temp[half_] = right
+            return left * right, temp
+
+    def __str__(self):
+        ret = ""
+        for i in xrange(self.deg() + 1):
+            if i != 0:
+                ret += "+"
+            ret += "(%s)x^%d" % (str(self.coefficients[i]), i)
+        return ret
+
+    def __divmod__(self, other):
+        remainder = copy.deepcopy(self)
+        zero = self._zero_()
+        p_zero = Polynomial([zero])
+        one = other.coefficients[-1] / other.coefficients[-1]
+        if other == Polynomial([one]):
+            return (self, Polynomial([zero]))
+        x = Polynomial([zero, one])
+        quotient = Polynomial([zero])
+        while remainder != p_zero and remainder.deg() >= other.deg():
+            r_lead = remainder.coefficients[-1]
+            o_lead = other.coefficients[-1]
+            q_part = Polynomial([r_lead / o_lead])
+            q_deg = remainder.deg() - other.deg()
+            if q_deg > 0:
+                q_part *= x ** q_deg
+            r_sub = other * q_part
+            remainder -= r_sub
+            quotient += q_part
+        return (quotient, remainder)
+
+    def __mod__(self, other):
+        return divmod(self, other)[1]
+
+    def __eq__(self, other):
+        if self.deg() != other.deg():
+            return False
+        for s_c, o_c in zip(self.coefficients, other.coefficients):
+            if s_c != o_c:
+                return False
+        return True
+
+    def __ne__(self, other):
+        return not self == other
+
+    def __div__(self, other):
+        div, mod = divmod(self, other)
+        assert mod == Polynomial([self._zero_()])
+        return div
+
+    def __floordiv__(self, other):
+        return divmod(self, other)[0]
+
+    def __repr__(self):
+        return str(self)
+
+
+class Zmod(list):
+    def __init__(self, p):
+        list.__init__(self)
+        self.n = p
+        for i in xrange(p):
+            self.append(FFE(i, p))
+
+    def __pow__(self, n):
+        assert n >= 1
+        perms = [[i] for i in self]
+        for i in xrange(1, n):
+            new_perms = []
+            for perm in perms:
+                for new in self:
+                    new_perms.append(perm + [new])
+            perms = new_perms
+        return perms
+
+
+def is_reducable(poly, divisors):
+    zero = poly - poly
+    for m in divisors:
+        if m.deg() > 0 and poly % m == zero:
+            return True, m
+    return False
+
+
+class GF(Zmod):
+    def __init__(self, n):
+        list.__init__(self)
+        self.n = n
+        factors = factor(n)
+        p = factors[0]
+        for f in factors:
+            assert f == p
+        if len(factors) == 1:
+            Zmod.__init__(self, p)
+        else:
+            Zmodx = Zmod(p) ** (len(factors))
+            Zmodx = [Polynomial(list(reversed(x))) for x in Zmodx]
+            i = p ** len(factors)
+            mod = Polynomial(list(reversed(to_base(i, p))))
+            while is_reducable(mod, Zmodx):
+                i += 1
+                mod = Polynomial(list(reversed(to_base(i, p))))
+                assert mod.deg() == len(factors)
+            for i, p in enumerate(Zmodx):
+                self.append(FFE(p, mod, parent=self))
+
+
+class Matrix:
+    def __init__(self, rows=1, cols=1, data=[], fill=None):
+        self.rows = rows
+        self.cols = cols
+        if data:
+            self.data = data
+            self.rows = len(data)
+            self.cols = len(data[0])
+        else:
+            self.data = []
+            for r in xrange(rows):
+                if hasattr(fill, '__call__'):
+                    row = [fill(r, c) for c in xrange(cols)]
+                else:
+                    row = [fill for c in xrange(cols)]
+                self.data.append(row)
+
+    @staticmethod
+    def get_identity(size):
+        data = []
+        for r in xrange(size):
+            data.append([])
+            for c in xrange(size):
+                data[r].append(1 if r == c else 0)
+        return Matrix(data=data)
+
+    def to_Zmod(self, base):
+        return Matrix(self.rows, self.cols,
+                      fill=lambda r, c: FFE(self.get(r, c) % base, base))
+
+    def to_GF(self, n):
+        field = GF(n)
+        return Matrix(self.rows, self.cols,
+                      fill=lambda r, c: field[self.get(r, c)])
+
+    def join_with(self, other):
+        assert self.rows == other.rows
+
+        def get(r, c):
+            if c < self.cols:
+                return self.get(r, c)
+            return other.get(r, c - self.cols)
+
+        return Matrix(self.rows, self.cols + other.cols, fill=get)
+
+    def submatrix(self, row, col, rows, cols):
+        return Matrix(rows, cols, fill=lambda r, c: self.get(r + row, c + col))
+
+    def get(self, r, c):
+        return self.data[r][c]
+
+    def set(self, r, c, value):
+        self.data[r][c] = value
+
+    def get_row(self, r):
+        return self.data[r]
+
+    def set_row(self, r, row):
+        self[r] = row
+
+    def __add__(self, other):
+        assert self.rows == other.rows
+        assert self.cols == other.cols
+        newData = []
+        for r in xrange(self.rows):
+            row = [x + y for (x, y) in
+                   zip(self.get_row(r), other.get_row(r))]
+            newData.append(row)
+        return Matrix(data=newData)
+
+    def __sub__(self, other):
+        assert self.rows == other.rows
+        assert self.cols == other.cols
+        newData = []
+        for r in xrange(self.rows):
+            row = [x - y for (x, y) in
+                   zip(self.get_row(r), other.get_row(r))]
+            newData.append(row)
+        return Matrix(data=newData)
+
+    def __mul__(self, other):
+        if isinstance(other, Matrix):
+            assert self.cols == other.rows
+            zero = self.get(0, 0)
+            zero = zero - zero
+            data = []
+            for i in xrange(self.rows):
+                data.append([])
+                for j in xrange(other.cols):
+                    data[i].append(zero)
+                    for k in xrange(self.cols):
+                        data[i][j] += self.get(i, k) * other.get(k, j)
+            return Matrix(data=data)
+        else:
+            data = []
+            for r in xrange(self.rows):
+                data.append([])
+                for c in xrange(self.cols):
+                    data[r].append(self.data[r][c] * other)
+            return Matrix(data=data)
+
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
+    def __pow__(self, other):
+        p = int(other)
+        assert p >= 1
+        assert self.rows == self.cols
+        result = copy.deepcopy(self)
+        for i in xrange(p - 1):
+            result *= self
+        return result
+
+    def __neg__(self):
+        data = []
+        for r in xrange(self.rows):
+            data.append([])
+            for c in xrange(self.cols):
+                data[r].append(-self.get(r, c))
+        return Matrix(data=data)
+
+    def __eq__(self, other):
+        if self.rows != other.rows:
+            return False
+        if self.cols != other.cols:
+            return False
+        for r in xrange(self.rows):
+            for c in xrange(self.cols):
+                if self.get(r, c) != other.get(r, c):
+                    return False
+        return True
+
+    def __ne__(self, other):
+        return not self == other
+
+    def __str__(self):
+        def join_row(row):
+            return "\t".join([str(value) for value in row])
+
+        rows = [join_row(row) for row in self.data]
+        return "\n".join(rows)
+
+    def to_latex(self):
+        def join_row(row):
+            return " & ".join([str(value) for value in row])
+
+        rows = [join_row(row) for row in self.data]
+        ret = "\\\\\n".join(rows)
+        ret = "\\left[\\begin{tabular}{" + "c" * self.cols + "}\n" + ret
+        ret = ret + "\\end{tabular}\\right]"
+        return ret
+
+    def transpose(self):
+        data = []
+        for c in xrange(self.cols):
+            data.append([])
+            for r in xrange(self.rows):
+                data[c].append(self.get(r, c))
+        return Matrix(data=data)
+
+    def get_reduced_echelon(self):
+        m = copy.deepcopy(self)
+
+        def get_pivot(matrix, r, c):
+            for i in xrange(r, matrix.rows):
+                v = matrix.get(i, c)
+                if v != v - v:
+                    return i
+            return None
+
+        def swap_rows(matrix, r1, r2):
+            row = matrix.data[r1]
+            matrix.data[r1] = matrix.data[r2]
+            matrix.data[r2] = row
+
+        def div_row(matrix, row, value):
+            matrix.data[row] = [v / value for v in matrix.data[row]]
+
+        def get_row_mult(matrix, row, mult):
+            return [v * mult for v in matrix.data[row]]
+
+        def row_add(matrix, row, add):
+            for i in xrange(len(add)):
+                matrix.data[row][i] = matrix.data[row][i] + add[i]
+
+        r = 0
+        for c in xrange(m.cols):
+            pivot = get_pivot(m, r, c)
+            if pivot is not None:
+                swap_rows(m, r, pivot)
+                pivot = r
+                div_row(m, r, m.get(r, c))
+                for i in xrange(m.rows):
+                    if i == r:
+                        continue
+                    add = get_row_mult(m, r, -m.get(i, c))
+                    row_add(m, i, add)
+                r += 1
+            if r >= m.rows:
+                break
+        return m
+
+    def to_list(self):
+        retval = list()
+        for row in self.data:
+            retval.append([int(str(x)) for x in row])
+        return retval
+
+
+class Code:
+    def __init__(self, block_size):
+        self.block_size = block_size
+
+    def encode(self, words):
+        raise NotImplementedError("Please Implement this method")
+
+    def decode(self, bits):
+        raise NotImplementedError("Please Implement this method")
+
+    def get_rand_word(self):
+        raise NotImplementedError("Please Implement this method")
+
+
+class LinearBlockCode(Code):
+    def __init__(self, G):
+        G = G.get_reduced_echelon()
+        self.G = G
+        P = Matrix(G.rows, G.cols - G.rows,
+                   fill=lambda r, c: G.get(r, c + G.rows)
+                   )
+        self.base = len(G.get(0, 0).belongs_to())
+        I = Matrix.get_identity(P.cols).to_GF(self.base)
+        self.H = (-(P.transpose())).join_with(I)
+        self.words = self.base ** G.rows
+        Code.__init__(self, 1)
+        self.code_list = [self.encode([w]) for w in xrange(self.words)]
+
+    def encode(self, words):
+        bits = []
+        zero = self.G.get(0, 0)
+        zero = zero - zero
+        for word in words:
+            w = to_base(word, self.base)
+            w = [zero for i in xrange(self.G.rows - len(w))] + w
+            w = Matrix(data=[w])
+            c = w * self.G
+            bits = bits + c.get_row(0)
+        return bits
+
+    def get_word_matrix(self, w):
+        w = to_base(w, self.base)
+        while len(w) < self.G.rows:
+            w = [FFE(0, self.base)] + w
+        return Matrix(data=[w])
+
+    def decode(self, bits):
+        def get_word(w):
+            return [bits[w * self.G.rows + i] for i in xrange(self.G.cols)]
+
+        words = len(bits) / self.G.cols
+        code_words = [get_word(w) for w in xrange(words)]
+        words = []
+        for code in code_words:
+            min_dist = float("inf")
+            min_index = 0
+            for i, w in enumerate(self.code_list):
+                dist = hamming_distance(w, code)
+                if dist < min_dist:
+                    min_dist = dist
+                    min_index = i
+            words.append(min_index)
+        return words
+
+    def word_iter(self):
+        return xrange(self.words)
+
+
+def hamming_distance(s1, s2):
+    assert len(s1) == len(s2)
+    return sum(ch1 != ch2 for ch1, ch2 in zip(s1, s2))
+
+
+def code_weight(code, zero_word, word_iter=None):
+    if word_iter is None:
+        word_iter = code.word_iter()
+    zero = code.encode([zero_word])
+    min_weight = float("inf")
+    for word in word_iter:
+        code_word = code.encode([word])
+        weight = hamming_distance(zero, code_word)
+        if weight != 0 and weight < min_weight:
+            min_weight = weight
+    return min_weight
 
 
 def valid(m):
     for row in m:
-        for value in row:
-            if value % 2 != 0:
-                return False
+        total = sum(row)
+        if total == 1 and row[-1] == 1:
+            return False
     return True
+
+
+def count_ones(m):
+    total = 0
+    for row in m:
+        total += row[-1]
+    return total
 
 
 def answer(matrix):
@@ -342,33 +919,29 @@ def answer(matrix):
                     mp_row[index] = 1
             mp_row.append(matrix[i][j])
             mp.append(mp_row)
-    mp = matConvert(mp, ZMod(2))
-    gauss_jordanModPow2(mp)
-    total = 0
-    for i in xrange(len(mp)):
-        row = mp[i]
-        val = row[-1].value
-        if val == 1:
-            flip(matrix, i)
-        total += val
-    if valid(matrix):
-        return total
-    return - 1
+    A = Matrix(data=mp).to_GF(2)
+    solution = A.get_reduced_echelon().to_list()
+    if not valid(solution):
+        return -1
+    return count_ones(solution)
 
 
 def test(m, a):
-    #m = [[1, 1, 1, 0], [1, 1, 0, 1], [1, 0, 1, 1], [0, 1, 1, 1]]
-    #on = [1, 1, 0, 0]
-    #for i in xrange(len(m)):
+    # m = [[1, 1, 1, 0], [1, 1, 0, 1], [1, 0, 1, 1], [0, 1, 1, 1]]
+    # on = [1, 1, 0, 0]
+    # for i in xrange(len(m)):
     #    row = m[i]
     #    row.append(on[i])
-    #print(gauss_jordan(m))
-    #print(m)
+    # print(gauss_jordan(m))
+    # print(m)
     a1 = answer(m)
     if a1 != a:
         print("WRONG %s %d %d" % (m, a1, a))
 
 
 test([[1, 1], [0, 0]], 2)
-#test([[1, 1, 1], [1, 0, 0], [1, 0, 1]], -1)
+test([[1, 1, 1], [1, 0, 0], [1, 0, 1]], -1)
+test([[1, 1, 1], [1, 1, 1], [1, 1, 1]], 3)
 
+import numpy as np
+test(np.random.randint(2,size=(15,15)), 1)

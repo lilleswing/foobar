@@ -50,4 +50,23 @@ public class GridZeroTest {
         //final int answer = GridZero.answer(matrix);
         //assertEquals(-1, answer);
     }
+
+    @Test
+    public void testKernel() {
+        for (int i = 2; i <= 15; i++) {
+            GridZero.answer(createMatrix(i));
+        }
+
+    }
+
+
+    private int[][] createMatrix(int size) {
+        int[][] matrix = new int[size][size];
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < size; j++) {
+                matrix[i][j] = 1;
+            }
+        }
+        return matrix;
+    }
 }
